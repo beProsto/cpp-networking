@@ -9,7 +9,7 @@ int main() {
 		ERROR_OUT("Couldn't start up WSA!");
 	}
 
-	ERROR_OUT("WHAT");
+	
 
 	std::cin.get();
 }
