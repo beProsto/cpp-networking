@@ -12,9 +12,9 @@
 #endif
 
 
-#define SERVER_PORT 2137
+#define SERVER_PORT "2137"
 
 #define ERROR_OUT(x) { \
 		printf("EXIT ERROR: %s\n", x); \
 		std::cin.get(); \
-		assert(false); }
+		return 1; }
