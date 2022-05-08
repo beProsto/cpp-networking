@@ -59,9 +59,9 @@ int main() {
 		ERROR_OUT("Couldn't send data!");
 	}
 
-	int a = recv(clientSocket, recvbuf, BUFFER_LEN, 0);
-	if(a > 0) {
-		printf("RECV %d bytes : '%s'\n", a, recvbuf);
+	int countOfBytesRecieved = recv(clientSocket, recvbuf, BUFFER_LEN, 0);
+	if(countOfBytesRecieved > 0) {
+		printf("RECV %d bytes : '%s'\n", countOfBytesRecieved, recvbuf);
 	}
 	else {
 		ERROR_OUT("Couldn't recieve data!");

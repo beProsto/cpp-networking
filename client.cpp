@@ -37,9 +37,9 @@ int main() {
 	const uint32_t BUFFER_LEN = 512;
 	char recvbuf[BUFFER_LEN] = {};
 
-	int a = recv(connectSocket, recvbuf, BUFFER_LEN, 0);
-	if(a > 0) {
-		printf("RECV %d bytes : '%s'\n", a, recvbuf);
+	int countOfBytesRecieved = recv(connectSocket, recvbuf, BUFFER_LEN, 0);
+	if(countOfBytesRecieved > 0) {
+		printf("RECV %d bytes : '%s'\n", countOfBytesRecieved, recvbuf);
 	}
 	else {
 		ERROR_OUT("Couldn't recieve data!");
