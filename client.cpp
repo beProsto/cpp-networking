@@ -28,15 +28,7 @@ int main() {
 			std::cout << "X: " << pos.a << " Y: " << pos.b << std::endl;
 		}
 
-		xy.a += 2;
-		xy.b += 1;
-
-		Net::Internal::Data data;
-		data.Id = POS;
-		data.Size = sizeof(xy);
-		data.Data = &xy;
-
-		client.Send(data);
+		client.Send(POS, xy);
 	}
 
 	printf("Client Closed!\n");

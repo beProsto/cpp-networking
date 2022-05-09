@@ -29,12 +29,7 @@ int main() {
 		pos.x += 1;
 		pos.y += 2;
 
-		Net::Internal::Data data;
-		data.Id = POS;
-		data.Size = sizeof(pos);
-		data.Data = &pos;
-
-		server.Send(data);
+		server.Send(POS, pos);
 	}
 
 	printf("Server Closed!\n");

@@ -35,6 +35,7 @@ namespace Internal {
 // 	Socket();
 // 	~Socket();
 // };
+
 struct Data {
 	SOCKET Owner = INVALID_SOCKET;
 	uint32_t Id = 0;
@@ -100,6 +101,14 @@ public:
 		UpdateData();
 	}
 
+	template <typename T>
+	void Send(uint32_t _id, const T& _data) {
+		Data data;
+		data.Id = _id;
+		data.Size = sizeof(T);
+		data.Data = (void*)&_data;
+		Send(data);
+	}
 	void Send(const Data& _data) {
 		for(uint32_t i = 0; i < m_Clients.size(); i++) {
 			const SOCKET& sock = m_Clients[i];
@@ -240,6 +249,14 @@ public:
 		}
 	}
 
+	template <typename T>
+	void Send(uint32_t _id, const T& _data) {
+		Data data;
+		data.Id = _id;
+		data.Size = sizeof(T);
+		data.Data = (void*)&_data;
+		Send(data);
+	}
 	void Send(const Data& _data) {
 		const uint32_t BUFFER_LEN = 512;
 		char sndbuf[BUFFER_LEN] = {};
