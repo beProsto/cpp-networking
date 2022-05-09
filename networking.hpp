@@ -6,6 +6,8 @@
 
 #include <vector>
 #include <unordered_map>
+#include <functional>
+#include <optional>
 
 #include <chrono>
 #include <thread>
@@ -99,11 +101,28 @@ public:
 	}
 
 	void Send(const Data& _data) {
+		for(uint32_t i = 0; i < m_Clients.size(); i++) {
+			const SOCKET& sock = m_Clients[i];
 
+			const uint32_t BUFFER_LEN = 512;
+			char sndbuf[BUFFER_LEN] = {};
+
+			uint32_t* start = (uint32_t*)sndbuf;
+			*start = _data.Id;
+			*(start+1) = _data.Time;
+			*(start+2) = _data.Size;
+			uint8_t* data = (uint8_t*)(start+3);
+			memcpy(data, _data.Data, _data.Size);
+
+			send(sock, sndbuf, sizeof(uint32_t) * 3 + _data.Size, 0);
+		}
 	}
 
-	const Data& Get(uint32_t _id) {
-		return Data{};
+	std::optional<Data> Get(uint32_t _id) {
+		if(m_Data.find(_id) != m_Data.end()) {
+			return m_Data[_id];
+		}
+		return std::nullopt;
 	}
 
 protected:
@@ -113,7 +132,7 @@ protected:
 			printf("No new connetion!\n");
 		}
 		else {
-			printf("Socket connected: %d\n", clientSocket);
+			printf("Socket connected: %d\n", (int)clientSocket);
 			m_Clients.push_back(clientSocket);
 		}
 	}
@@ -127,15 +146,34 @@ protected:
 			int countOfBytesReceived = recv(sock, recvbuf, BUFFER_LEN, 0);
 
 			if(countOfBytesReceived > 0) {
-				printf("Received Data from %d, [%d:'%s']\n", sock, countOfBytesReceived, recvbuf);
+				printf("Received Data from %d, [%d:'%s']\n", (int)sock, countOfBytesReceived, recvbuf);
+				
+				uint32_t* start = (uint32_t*)recvbuf;
+				uint32_t key = *start;
+				uint32_t time = *(start+1);
+				uint32_t size = *(start+2);
+				uint8_t* data = (uint8_t*)(start+3);
+
+				Data received;
+				received.Owner = sock;
+				received.Id = key;
+				received.Time = time;
+				received.Size = size;
+				received.Data = malloc(size);
+				memcpy(received.Data, data, size);
+
+				if(m_Data.find(key) != m_Data.end()) {
+					free(m_Data[key].Data);
+				}
+				m_Data[key] = received;
 			}
 			else if(countOfBytesReceived == SOCKET_ERROR && WSAGetLastError() == WSAECONNRESET) {
-				printf("Socket disconnected: %d\n", sock);
+				printf("Socket disconnected: %d\n", (int)sock);
 				m_Clients.erase(m_Clients.begin() + i);
 				closesocket(sock);
 			}
 			else {
-				printf("Didn't receive data from %d\n", sock);
+				printf("Didn't receive data from %d\n", (int)sock);
 			}
 		}
 	}
@@ -147,7 +185,8 @@ protected:
 	SOCKET m_ListenSocket;
 	
 	std::vector<SOCKET> m_Clients;
-	std::unordered_map<uint32_t, Data> m_DataQueue;
+	
+	std::unordered_map<uint32_t, Data> m_Data;
 };
 
 class Client {
@@ -155,6 +194,7 @@ public:
 	Client(const std::string& _host = "127.0.0.1", const std::string& _port = DEFAULT_PORT) {
 		m_Host = _host;
 		m_Port = _port;
+		m_Connected = false;
 
 		// Init
 		WSAData wsaData;
@@ -193,11 +233,73 @@ public:
 		}
 		else {
 			printf("Socket connected\n");
+			u_long mode = 1; // set as a non-blocking socket
+			ioctlsocket(m_ConnectSocket, FIONBIO, &mode);
+			m_Connected = true;
 			return true;
 		}
 	}
 
-	void Update();
+	void Send(const Data& _data) {
+		const uint32_t BUFFER_LEN = 512;
+		char sndbuf[BUFFER_LEN] = {};
+
+		uint32_t* start = (uint32_t*)sndbuf;
+		*start = _data.Id;
+		*(start+1) = _data.Time;
+		*(start+2) = _data.Size;
+		uint8_t* data = (uint8_t*)(start+3);
+		memcpy(data, _data.Data, _data.Size);
+
+		send(m_ConnectSocket, sndbuf, sizeof(uint32_t) * 3 + _data.Size, 0);
+	}
+	std::optional<Data> Get(uint32_t _id) {
+		if(m_Data.find(_id) != m_Data.end()) {
+			return m_Data[_id];
+		}
+		return std::nullopt;
+	}
+
+	bool IsConnected() const {
+		return m_Connected;
+	}
+
+	void Update() {
+		const uint32_t BUFFER_LEN = 512;
+		char recvbuf[BUFFER_LEN] = {};
+
+		int countOfBytesReceived = recv(m_ConnectSocket, recvbuf, BUFFER_LEN, 0);
+
+		if(countOfBytesReceived > 0) {
+			printf("Received Data from %d, [%d:'%s']\n", (int)m_ConnectSocket, countOfBytesReceived, recvbuf);
+
+			uint32_t* start = (uint32_t*)recvbuf;
+			uint32_t key = *start;
+			uint32_t time = *(start+1);
+			uint32_t size = *(start+2);
+			uint8_t* data = (uint8_t*)(start+3);
+
+			Data received;
+			received.Owner = m_ConnectSocket;
+			received.Id = key;
+			received.Time = time;
+			received.Size = size;
+			received.Data = malloc(size);
+			memcpy(received.Data, data, size);
+
+			if(m_Data.find(key) != m_Data.end()) {
+				free(m_Data[key].Data);
+			}
+			m_Data[key] = received;
+		}
+		else if(countOfBytesReceived == SOCKET_ERROR && WSAGetLastError() == WSAECONNRESET) {
+			printf("Socket disconnected: %d\n", (int)m_ConnectSocket);
+			m_Connected = false;
+		}
+		else {
+			printf("Didn't receive data from %d\n", (int)m_ConnectSocket);
+		}
+	}
 
 protected:
 	std::string m_Host;
@@ -206,7 +308,9 @@ protected:
 	addrinfo* m_AddrInfo;
 	SOCKET m_ConnectSocket;
 	
-	std::unordered_map<uint32_t, Data> m_DataQueue;
+	bool m_Connected;
+
+	std::unordered_map<uint32_t, Data> m_Data;
 };
 
 }
