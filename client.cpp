@@ -1,4 +1,9 @@
 #include "networking.hpp"
+#include <time.h>
+
+template<typename T> T randomRange(T min, T max) {
+	return min + ((T)std::rand() % ( min - max + (T)1 ));
+}
 
 #define POS 32
 struct Pair {
@@ -15,20 +20,21 @@ int main() {
 		std::this_thread::sleep_for(1000ms);
 	}
 
-	Pair xy = {-50, -32};
+	srand(time(NULL));
+	Pair xy = {randomRange(-50, 50), randomRange(-50, 50)};
 
 	while(client.IsConnected()) {
 		std::this_thread::sleep_for(1000ms);
 		client.Update();
 
 		if(auto opt = client.Get(POS)) {
-			Pair pos;
-			pos = *(Pair*)((*opt).Data);
+			Pair p = *(Pair*)((*opt).Data);
 
-			std::cout << "X: " << pos.a << " Y: " << pos.b << std::endl;
+			std::cout << "Received: X: " << p.a << " Y: " << p.b << std::endl;
 		}
 
 		client.Send(POS, xy);
+		std::cout << "Sent: X: " << xy.a << " Y: " << xy.b << std::endl;
 	}
 
 	printf("Client Closed!\n");

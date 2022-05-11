@@ -1,5 +1,6 @@
 #include "networking.hpp"
 
+
 #define POS 32
 struct Position {
 	int x = 0;
@@ -20,16 +21,16 @@ int main() {
 		server.Update();
 
 		if(auto opt = server.Get(POS)) {
-			Position pos;
-			pos = *(Position*)((*opt).Data);
+			Position p = *(Position*)((*opt).Data);
 
-			std::cout << "X: " << pos.x << " Y: " << pos.y << std::endl;
+			std::cout << "Received: X: " << p.x << " Y: " << p.y << std::endl;
 		}
 
 		pos.x += 1;
 		pos.y += 2;
 
 		server.Send(POS, pos);
+		std::cout << "Sent: X: " << pos.x << " Y: " << pos.y << std::endl;
 	}
 
 	printf("Server Closed!\n");

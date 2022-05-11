@@ -153,6 +153,7 @@ protected:
 			char recvbuf[BUFFER_LEN] = {};
 
 			int countOfBytesReceived = recv(sock, recvbuf, BUFFER_LEN, 0);
+			bool errorEncountered = WSAGetLastError() == WSAECONNRESET;
 
 			if(countOfBytesReceived > 0) {
 				printf("Received Data from %d, [%d:'%s']\n", (int)sock, countOfBytesReceived, recvbuf);
@@ -176,14 +177,14 @@ protected:
 				}
 				m_Data[key] = received;
 			}
-			else if(countOfBytesReceived == SOCKET_ERROR && WSAGetLastError() == WSAECONNRESET) {
+			else if(errorEncountered) {
+				closesocket(sock);
 				printf("Socket disconnected: %d\n", (int)sock);
 				m_Clients.erase(m_Clients.begin() + i);
-				closesocket(sock);
 			}
-			else {
-				printf("Didn't receive data from %d\n", (int)sock);
-			}
+			// else {
+			// 	printf("Didn't receive data from %d\n", (int)sock);
+			// }
 		}
 	}
 
@@ -230,7 +231,7 @@ public:
 		printf("Socket opened\n");
 	}
 	~Client() {
-		// closesocket(m_ConnectSocket); // anyone mind telling me why it breaks disconnection detection?
+		closesocket(m_ConnectSocket);
 		freeaddrinfo(m_AddrInfo);
 		WSACleanup();
 	}
@@ -309,13 +310,13 @@ public:
 			}
 			m_Data[key] = received;
 		}
-		else if(countOfBytesReceived == SOCKET_ERROR && WSAGetLastError() == WSAECONNRESET) {
+		else if(WSAGetLastError() == WSAECONNRESET) {
 			printf("Socket disconnected: %d\n", (int)m_ConnectSocket);
 			m_Connected = false;
 		}
-		else {
-			printf("Didn't receive data from %d\n", (int)m_ConnectSocket);
-		}
+		// else {
+		// 	printf("Didn't receive data from %d\n", (int)m_ConnectSocket);
+		// }
 	}
 
 protected:
