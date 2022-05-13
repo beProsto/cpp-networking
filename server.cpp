@@ -32,7 +32,7 @@ int main() {
 			server.Send(pos);
 			std::cout << "Sent: X: " << pos.x << " Y: " << pos.y << std::endl;
 
-			server.Send(69, SUS::Protocol::UDP);
+			server.Send(pos, SUS::Protocol::UDP);
 		}
 	}
 	catch (std::exception &e) {

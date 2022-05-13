@@ -52,12 +52,14 @@ public:
 			}
 		}
 		else {
-			sendto(
-				m_UDPConnection.GetSocket(), 
-				(const char*)serialised.GetData(), 4 + _data.Size,
-				0, m_UDPConnection.GetAddrInfo()->ai_addr, 
-				(int)m_UDPConnection.GetAddrInfo()->ai_addrlen
-			);
+			for(uint32_t i = 0; i < m_Clients.size(); i++) {
+				sendto(
+					m_UDPConnection.GetSocket(), 
+					(const char*)serialised.GetData(), 4 + _data.Size,
+					0, (sockaddr*)&m_Clients[i].UDP,
+					(int)m_UDPConnection.GetAddrInfo()->ai_addrlen
+				);
+			}
 		}
 	}
 
