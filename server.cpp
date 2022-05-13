@@ -1,7 +1,8 @@
-#include "networking.hpp"
+#include "sus/networking.hpp"
+#include <chrono>
+#include <thread>
+using namespace std::chrono_literals;
 
-
-#define POS 32
 struct Position {
 	int x = 0;
 	int y = 0;
@@ -10,27 +11,32 @@ struct Position {
 int main() {
 	printf("This is the Server:\n");
 
-	Net::Internal::Server server;
+	try {
+		SUS::Server server;
+		Position pos;
+		pos.x = 2;
+		pos.y = 5;
 
-	Position pos;
-	pos.x = 2;
-	pos.y = 5;
+		while(true) {
+			std::this_thread::sleep_for(1000ms);
+			server.Update();
 
-	while(true) {
-		std::this_thread::sleep_for(1000ms);
-		server.Update();
+			auto opt = server.Get(); 
+			if(opt.Data) {
+				Position p = *(Position*)(opt.Data);
+				std::cout << "Received: X: " << p.x << " Y: " << p.y << std::endl;
+			}
+			pos.x += 1;
+			pos.y += 2;
 
-		if(auto opt = server.Get(POS)) {
-			Position p = *(Position*)((*opt).Data);
+			server.Send(pos);
+			std::cout << "Sent: X: " << pos.x << " Y: " << pos.y << std::endl;
 
-			std::cout << "Received: X: " << p.x << " Y: " << p.y << std::endl;
+			server.Send(69, SUS::Protocol::UDP);
 		}
-
-		pos.x += 1;
-		pos.y += 2;
-
-		server.Send(POS, pos);
-		std::cout << "Sent: X: " << pos.x << " Y: " << pos.y << std::endl;
+	}
+	catch (std::exception &e) {
+		std::cout<<"Caught exception: "<<e.what()<<"\n";
 	}
 
 	printf("Server Closed!\n");
