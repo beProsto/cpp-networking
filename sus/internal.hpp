@@ -1,6 +1,9 @@
 #pragma once
 
+#include <string>
+
 #include "networking.hpp"
+#include "event.hpp"
 
 namespace SUS {
 namespace Internal {
@@ -8,54 +11,6 @@ namespace Internal {
 struct Data {
 	uint32_t Size = 0;
 	void* Data = nullptr;
-};
-
-class DataParser {
-public:
-	DataParser() {
-		m_Parsing = 0;
-		m_SizeNeeded = 0;
-	}
-	~DataParser() {
-		
-	}
-
-	bool ParseBytes() {
-		if(!m_Parsing && m_BytesReceived.size() >= 4) {
-			m_SizeNeeded = 4 + (*(uint32_t*)&m_BytesReceived[0]);
-			m_Parsing = true;
-		}
-		if(m_Parsing) {
-			uint32_t copySize = min(m_BytesReceived.size(), m_SizeNeeded);
-			size_t beforeResize = m_BytesParsed.size();
-			m_BytesParsed.resize(beforeResize + copySize);
-			memcpy(&m_BytesParsed[beforeResize], &m_BytesReceived[0], copySize);
-			m_BytesReceived.erase(m_BytesReceived.begin(), m_BytesReceived.begin() + copySize);
-			
-			m_SizeNeeded -= copySize;
-			if(m_SizeNeeded <= 0) {
-				m_Parsing = false;
-				return true;
-			}
-		}
-		return false;
-	}
-
-	void Receive(uint32_t _size, void* _data) {
-		size_t beforeResize = m_BytesParsed.size();
-		m_BytesReceived.resize(beforeResize + 4 + _size);
-		memcpy(&m_BytesReceived[beforeResize], _data, _size);
-	}
-
-	const std::vector<uint8_t>& GetParsed() {
-		return m_BytesParsed;
-	}
-
-protected:
-	uint32_t m_SizeNeeded;
-	bool m_Parsing;
-	std::vector<uint8_t> m_BytesReceived;
-	std::vector<uint8_t> m_BytesParsed;
 };
 
 class DataSerialiser {
@@ -180,6 +135,67 @@ struct Socket {
 	SOCKET TCP = INVALID_SOCKET;
 	sockaddr_in UDP = {};
 };
+
+class EventPoller {
+public:
+	EventPoller() {}
+	~EventPoller() {}
+
+	bool PollEvent(Event& _eventRef) {
+		if(!m_Events.empty()) {
+			_eventRef = m_Events.front();
+			m_EventsToKillNextUpdate.push(_eventRef);
+			m_Events.pop();
+			return true;
+		}
+		return false;
+	}
+
+protected:
+	void UpdateEvents() {
+		while(!m_EventsToKillNextUpdate.empty()) {
+			Event& event = m_EventsToKillNextUpdate.front();
+
+			if(event.Type == EventType::MessageReceived) {
+				free(event.Message.Data);
+			}
+
+			m_EventsToKillNextUpdate.pop();
+		}
+	}
+
+protected:
+	std::queue<Event> m_Events;
+	std::queue<Event> m_EventsToKillNextUpdate;
+};
+
+#define DEFINE_SEND_METHODS() \
+	template <typename T> \
+	void Send(const T& _data, Protocol _prot = Protocol::TCP) { \
+		Internal::Data data; \
+		data.Size = sizeof(T); \
+		data.Data = (void*)&_data; \
+		Send(data, _prot); \
+	} \
+	void Send(uint32_t _size, void* _data, Protocol _prot = Protocol::TCP) { \
+		Internal::Data data; \
+		data.Size = _size; \
+		data.Data = _data; \
+		Send(data, _prot); \
+	}
+
+std::string IdUDP(const sockaddr_in& _udp) {
+	char id[6];
+	*(uint32_t*)(id) = _udp.sin_addr.s_addr;
+	*(uint16_t*)(id+4) = _udp.sin_port;
+	id[0] += 1;
+	id[1] += 1;
+	id[2] += 1;
+	id[3] += 1;
+	id[4] += 1;
+	id[5] += 1;
+	return id;
+}
 
 }
 }

@@ -13,26 +13,36 @@ int main() {
 
 	try {
 		SUS::Server server;
-		Position pos;
-		pos.x = 2;
-		pos.y = 5;
 
 		while(true) {
-			std::this_thread::sleep_for(1000ms);
+			// std::this_thread::sleep_for(500ms);
 			server.Update();
 
-			auto opt = server.Get(); 
-			if(opt.Data) {
-				Position p = *(Position*)(opt.Data);
-				std::cout << "Received: X: " << p.x << " Y: " << p.y << std::endl;
+			SUS::Event event;
+			while(server.PollEvent(event)) {
+				switch(event.Type) {
+					case SUS::EventType::ClientConnected: {
+						printf("Client %d just connected!\n", (int)event.Client.Id);
+					} break;
+					case SUS::EventType::ClientDisconnected: {
+						printf("Client %d has disconnected!\n", (int)event.Client.Id);
+						// Just testing out sending data to the clients
+						server.Send((int)event.Client.Id, SUS::Protocol::UDP);
+						server.Send(Position{(int)event.Client.Id, -(int)event.Client.Id}, SUS::Protocol::TCP);
+					} break;
+					case SUS::EventType::MessageReceived: {
+						printf("Received a");
+						if(event.Message.Protocol == SUS::Protocol::TCP) {
+							printf(" TCP");
+						}
+						else {
+							printf("n UDP");
+						}
+						printf(" message containing %d bytes from client %d.\n", 
+						event.Message.Size, (int)event.Message.ClientId);
+					} break;
+				}
 			}
-			pos.x += 1;
-			pos.y += 2;
-
-			server.Send(pos);
-			std::cout << "Sent: X: " << pos.x << " Y: " << pos.y << std::endl;
-
-			server.Send(pos, SUS::Protocol::UDP);
 		}
 	}
 	catch (std::exception &e) {

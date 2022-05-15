@@ -5,17 +5,18 @@
 
 namespace SUS {
 
-class Client {
+class Client: public Internal::EventPoller {
 public:
 	Client(const std::string& _host = "127.0.0.1", const std::string& _port = SUS_DEFAULT_PORT) {
 		m_Host = _host;
 		m_Port = _port;
-		m_Connected = false;
-		m_ID = -1;
+		
+		m_ID = INVALID_SOCKET;
 
 		m_TCPConnection.Create(m_Host.c_str(), m_Port.c_str(), Internal::Connection::Type::TCP);
 		m_UDPConnection.Create(m_Host.c_str(), m_Port.c_str(), Internal::Connection::Type::UDP);
-		printf("Socket opened\n");
+
+		// printf("Socket opened\n");
 	}
 	~Client() {
 
@@ -23,32 +24,28 @@ public:
 
 	bool Connect() {
 		if(connect(m_TCPConnection.GetSocket(), m_TCPConnection.GetAddrInfo()->ai_addr, (int)m_TCPConnection.GetAddrInfo()->ai_addrlen) == SOCKET_ERROR) {
-			printf("Couldn't connect to the socket!\n");
+			// printf("Couldn't connect to the socket!\n");
 			return false;
 		}
 		else {
-			printf("Socket connected\n");
+			// printf("Socket connected\n");
 			m_TCPConnection.MakeNonBlocking();
 			m_UDPConnection.MakeNonBlocking();
-			
 			m_Connected = true;
 			return true;
 		}
 	}
+	bool IsConnected() const {
+		return m_Connected;
+	}
 
-	template <typename T>
-	void Send(const T& _data, Protocol _prot = Protocol::TCP) {
-		Internal::Data data;
-		data.Size = sizeof(T);
-		data.Data = (void*)&_data;
-		Send(data, _prot);
+	void Update() {
+		// printf("Update:\n");
+		UpdateEvents();
+		UpdateData();
 	}
-	void Send(uint32_t _size, void* _data, Protocol _prot = Protocol::TCP) {
-		Internal::Data data;
-		data.Size = _size;
-		data.Data = _data;
-		Send(data, _prot);
-	}
+
+	DEFINE_SEND_METHODS();
 	void Send(const Internal::Data& _data, Protocol _prot = Protocol::TCP) {
 		Internal::DataSerialiser serialised(_data);
 		if(_prot == Protocol::TCP) {
@@ -64,83 +61,84 @@ public:
 		}
 	}
 
-	Internal::Data Get() {
-		return m_Data;
-	}
-
-	bool IsConnected() const {
-		return m_Connected;
-	}
-
-	void Update() {
+protected:
+	void UpdateData() {
 		const uint32_t BUFFER_LEN = 512;
 		char recvbuf[BUFFER_LEN] = {};
 
+		// UDP Messages
+		while(true) {
+			sockaddr_in udpInfo = {};
+			int udpInfoLen = sizeof(udpInfo);
+			int udpBytesReceived = recvfrom(m_UDPConnection.GetSocket(), recvbuf, BUFFER_LEN, 0, (sockaddr*)&udpInfo, &udpInfoLen);
+
+			if(udpBytesReceived > 0) {
+				uint32_t size = *(uint32_t*)recvbuf;
+				uint8_t* data = (uint8_t*)(recvbuf+4);
+
+				Event event;
+				event.Type = EventType::MessageReceived;
+				event.Message.ClientId = 0;
+				event.Message.Protocol = Protocol::UDP;
+				event.Message.Size = size;
+				event.Message.Data = malloc(size);
+				memcpy(event.Message.Data, data, size);
+				m_Events.push(event);
+			}
+			else {
+				break;
+			}
+		}
+
+		// TCP Messages
 		int countOfBytesReceived = recv(m_TCPConnection.GetSocket(), recvbuf, BUFFER_LEN, 0);
+		bool errorEncountered = WSAGetLastError() == WSAECONNRESET;
 
-		if(countOfBytesReceived > 0) {
-			printf("Received Data from %d, [%d:'%d']\n", (int)m_TCPConnection.GetSocket(), countOfBytesReceived, *(uint32_t*)recvbuf);
-
+		// First TCP Message contains the client's SOCKET, it sends it back using UDP
+		const size_t FIRST_MSG_SIZE = sizeof(uint32_t) + sizeof(SOCKET);
+		if(m_ID == INVALID_SOCKET && countOfBytesReceived == FIRST_MSG_SIZE) {
+			m_ID = *(SOCKET*)(recvbuf+sizeof(uint32_t));
+			char msg[FIRST_MSG_SIZE] = {};
+			*(uint32_t*)(msg) = sizeof(SOCKET);
+			*(SOCKET*)(msg+sizeof(uint32_t)) = m_ID;
+			sendto(
+				m_UDPConnection.GetSocket(), 
+				(const char*)msg, FIRST_MSG_SIZE,
+				0, m_UDPConnection.GetAddrInfo()->ai_addr, 
+				(int)m_UDPConnection.GetAddrInfo()->ai_addrlen
+			);
+		}
+		else if(countOfBytesReceived > 0) {
+			// printf("Received Data from %d, [%d:'%d']\n", (int)m_TCPConnection.GetSocket(), countOfBytesReceived, *(int32_t*)(recvbuf+4));
+		
 			uint32_t size = *(uint32_t*)recvbuf;
 			uint8_t* data = (uint8_t*)(recvbuf+4);
 
-			Internal::Data received;
-			received.Size = size;
-			received.Data = malloc(size);
-			memcpy(received.Data, data, size);
-
-			// First TCP Message contains the client's SOCKET, it sends it back using UDP
-			if(m_ID == -1 && received.Size == 4) {
-				m_ID = *(int32_t*)received.Data;
-				char msg[8] = {};
-				*(uint32_t*)(msg)  = 4;
-				*(int32_t*)(msg+4) = m_ID;
-				sendto(
-					m_UDPConnection.GetSocket(), 
-					msg, 8,
-					0, m_UDPConnection.GetAddrInfo()->ai_addr, 
-					(int)m_UDPConnection.GetAddrInfo()->ai_addrlen
-				);
-			}
-			else {
-				if(m_Data.Data) {
-					free(m_Data.Data);
-				}
-				m_Data = received;
-			}
+			Event event;
+			event.Type = EventType::MessageReceived;
+			event.Message.ClientId = 0;
+			event.Message.Protocol = Protocol::TCP;
+			event.Message.Size = size;
+			event.Message.Data = malloc(size);
+			memcpy(event.Message.Data, data, size);
+			m_Events.push(event);
 		}
-		else if(WSAGetLastError() == WSAECONNRESET) {
-			printf("Socket disconnected: %d\n", (int)m_TCPConnection.GetSocket());
+		else if(errorEncountered) {
+			// printf("Socket disconnected!\n");
 			m_Connected = false;
 		}
-		// else {
-		// 	printf("Didn't receive data from %d\n", (int)m_TCPConnection.GetSocket());
-		// }
-		sockaddr_in info = {};
-		int len = sizeof(info);
-		int cnt = recvfrom(m_UDPConnection.GetSocket(), recvbuf, BUFFER_LEN, 
-		0, (sockaddr*)&info, &len);
-		if(cnt > 0) {
-			printf("UDP Received Data from %d.%d.%d.%d:%d, [%d:'%d']\n", 
-				((uint8_t*)&info.sin_addr.s_addr)[0],
-				((uint8_t*)&info.sin_addr.s_addr)[1],
-				((uint8_t*)&info.sin_addr.s_addr)[2],
-				((uint8_t*)&info.sin_addr.s_addr)[3],
-				(int)info.sin_port, 
-				cnt, *(uint32_t*)recvbuf
-			);
-		}
-}
+	}
 
 protected:
 	std::string m_Host;
 	std::string m_Port;
 
-	int32_t m_ID;
-	
 	bool m_Connected;
 
-	Internal::Data m_Data;
+	SOCKET m_ID;
+
+	// Internal::DataParser m_TCPParser;
+	// Internal::DataParser m_UDPParser;
 
 	Internal::Connection m_TCPConnection;
 	Internal::Connection m_UDPConnection;
