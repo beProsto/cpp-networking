@@ -15,7 +15,7 @@ int main() {
 		SUS::Server server;
 
 		while(true) {
-			// std::this_thread::sleep_for(500ms);
+			std::this_thread::sleep_for(500ms);
 			server.Update();
 
 			SUS::Event event;

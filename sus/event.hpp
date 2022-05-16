@@ -10,7 +10,7 @@ namespace _Event {
 		SOCKET ClientId;
 		Protocol Protocol;
 		uint32_t Size;
-		void* Data;
+		uint8_t* Data;
 	};
 }
 

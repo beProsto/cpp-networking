@@ -26,7 +26,7 @@ int main() {
 		Pair xy = {randomRange(-50, 50), randomRange(-50, 50)};
 
 		while(client.IsConnected()) {
-			// std::this_thread::sleep_for(500ms);
+			std::this_thread::sleep_for(500ms);
 			client.Update();
 
 			SUS::Event event;
